@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#05070c" />
+<meta name="description" content="Juego interactivo de realidad mixta del dron SE: vuela el dron sobre la imagen real de tu camara y responde al entorno." />
+<title>DRON SE · Realidad Mixta</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%9B%B8%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./src/ui/styles.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<!-- ============================================================
+     CAPA 1 · VIDEO REAL (passthrough de la camara = "mundo real")
+     ============================================================ -->
+<video id="mr-video" playsinline autoplay muted></video>
+<div id="mr-veil"></div>
+
+<!-- ============================================================
+     CAPA 2 · ESCENA 3D VIRTUAL (three.js)
+     ============================================================ -->
+<canvas id="scene"></canvas>
+
+<!-- ============================================================
+     CAPA 3 · HUD
+     ============================================================ -->
+<div id="hud" class="hidden" aria-live="polite">
+
+  <!-- panel de mision -->
+  <section id="panel-mission" class="glass">
+    <header>
+      <span class="dot"></span>
+      <h2 id="mission-name">Mision</h2>
+    </header>
+    <p id="mission-objective">—</p>
+    <div class="row">
+      <span id="mission-timer" class="mono">00:00</span>
+      <span id="mission-progress" class="mono">0/0</span>
+    </div>
+    <div id="mission-steps"></div>
+  </section>
+
+  <!-- telemetria -->
+  <section id="panel-telemetry" class="glass">
+    <div class="tgrid">
+      <div class="cell"><span class="k">BATERIA</span><span class="v mono" id="t-battery">100%</span>
+        <div class="bar"><i id="bar-battery"></i></div></div>
+      <div class="cell"><span class="k">ALTURA</span><span class="v mono" id="t-alt">0.0 m</span></div>
+      <div class="cell"><span class="k">VELOCIDAD</span><span class="v mono" id="t-spd">0.0 m/s</span></div>
+      <div class="cell"><span class="k">VIENTO</span><span class="v mono" id="t-wind">0.0 m/s</span></div>
+      <div class="cell"><span class="k">ESTADO</span><span class="v mono" id="t-state">EN TIERRA</span></div>
+      <div class="cell"><span class="k">INTEGRIDAD</span><span class="v mono" id="t-hull">100%</span>
+        <div class="bar"><i id="bar-hull"></i></div></div>
+    </div>
+    <div id="wind-rose"><canvas id="wind-canvas" width="120" height="120"></canvas></div>
+  </section>
+
+  <!-- mira + horizonte artificial -->
+  <div id="reticle">
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <g id="horizon-group">
+        <line x1="20" y1="100" x2="180" y2="100" stroke="#7ef7c8" stroke-width="1.2" opacity=".55"/>
+        <line x1="100" y1="92" x2="100" y2="108" stroke="#7ef7c8" stroke-width="1.2" opacity=".55"/>
+      </g>
+      <circle cx="100" cy="100" r="26" fill="none" stroke="#7ef7c8" stroke-width="1" opacity=".35"/>
+      <circle id="reticle-dot" cx="100" cy="100" r="2.4" fill="#7ef7c8"/>
+      <path d="M84 100 h12 M104 100 h12 M100 84 v12 M100 104 v12" stroke="#eaf6ff" stroke-width="1.6" opacity=".8"/>
+    </svg>
+  </div>
+
+  <!-- avisos flotantes -->
+  <div id="toasts"></div>
+
+  <!-- minimapa -->
+  <section id="panel-minimap" class="glass">
+    <canvas id="minimap" width="220" height="220"></canvas>
+    <div class="mm-legend">
+      <span><i class="sw sw-drone"></i>Dron</span>
+      <span><i class="sw sw-home"></i>Base</span>
+      <span><i class="sw sw-obj"></i>Objetivo</span>
+    </div>
+  </section>
+
+  <!-- joysticks tactiles -->
+  <div id="stick-l" class="stick hidden"><div class="stick-base"><i class="stick-knob"></i></div><span class="stick-label">ACELERADOR / GIRO</span></div>
+  <div id="stick-r" class="stick hidden"><div class="stick-base"><i class="stick-knob"></i></div><span class="stick-label">CABECEO / ALABEO</span></div>
+
+  <!-- barra de acciones -->
+  <nav id="actionbar">
+    <button class="abtn" id="btn-takeoff" title="Despegar / Aterrizar (T)"><i class="ico">&#9650;</i><span>DESPEGAR</span></button>
+    <button class="abtn" id="btn-photo" title="Foto (F)">&#128247;<span>FOTO</span></button>
+    <button class="abtn" id="btn-light" title="Luces (L)">&#128161;<span>LUCES</span></button>
+    <button class="abtn" id="btn-view" title="Camara (C)">&#127909;<span>VISTA</span></button>
+    <button class="abtn" id="btn-home" title="Volver a casa (H)">&#127968;<span>BASE</span></button>
+    <button class="abtn" id="btn-pause" title="Pausa (Esc)">&#10073;&#10073;<span>PAUSA</span></button>
+  </nav>
+
+  <!-- registro de eventos -->
+  <div id="log"></div>
+  <div id="damage-vignette"></div>
+  <div id="photo-flash"></div>
+  <div id="mr-badge" class="glass"><i class="rec"></i> MR · CAMARA EN VIVO</div>
+</div>
+
+<!-- ============================================================
+     CAPA 4 · MENUS
+     ============================================================ -->
+<div id="screens">
+
+  <!-- Pantalla de carga -->
+  <section class="screen active" id="screen-boot">
+    <div class="boot-wrap">
+      <div class="boot-drone"></div>
+      <h1 class="brand">DRON<span>SE</span></h1>
+      <p class="tagline">Simulador de vuelo en realidad mixta</p>
+      <div class="progress"><i id="boot-bar"></i></div>
+      <p class="mono small" id="boot-msg">Iniciando sistemas…</p>
+    </div>
+  </section>
+
+  <!-- Portada -->
+  <section class="screen" id="screen-start">
+    <div class="start-grid">
+      <div class="start-left">
+        <h1 class="brand big">DRON<span>SE</span></h1>
+        <p class="tagline">Realidad mixta · Vuela el dron sobre tu habitacion</p>
+        <ul class="feature-list">
+          <li><b>Passthrough real</b>: la imagen de tu camara es el suelo del juego.</li>
+          <li><b>Entorno generado</b>: viento, lluvia, ciclo dia/noche y obstaculos procedurales.</li>
+          <li><b>Interaccion humana</b>: mando, teclado, gyro, voz y gestos con la mano.</li>
+          <li><b>El dron responde</b>: fisica de cuadricoptero, luces, sonido y haptica.</li>
+        </ul>
+        <div class="btn-col">
+          <button class="btn primary" id="btn-play">JUGAR</button>
+          <button class="btn" id="btn-missions">MISIONES</button>
+          <button class="btn" id="btn-help">CONTROLES</button>
+          <button class="btn" id="btn-settings">AJUSTES</button>
+          <button class="btn ghost hidden" id="btn-ar">MODO AR (WebXR)</button>
+        </div>
+      </div>
+      <figure class="start-right">
+        <img src="./assets/vista_general_2.webp" alt="Plano tecnico del dron SE" />
+        <figcaption>Plano de referencia · Dron SE (cuadricoptero con camara estabilizada)</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- Seleccion de mision -->
+  <section class="screen" id="screen-missions">
+    <h2 class="screen-title">MISIONES</h2>
+    <div id="mission-list" class="card-grid"></div>
+    <div class="row-end"><button class="btn ghost" data-back="1">VOLVER</button></div>
+  </section>
+
+  <!-- Controles -->
+  <section class="screen" id="screen-help">
+    <h2 class="screen-title">CONTROLES</h2>
+    <div class="help-grid" id="help-grid"></div>
+    <div class="row-end"><button class="btn ghost" data-back="1">VOLVER</button></div>
+  </section>
+
+  <!-- Ajustes -->
+  <section class="screen" id="screen-settings">
+    <h2 class="screen-title">AJUSTES</h2>
+    <div class="settings" id="settings-grid"></div>
+    <div class="row-end"><button class="btn ghost" data-back="1">VOLVER</button></div>
+  </section>
+
+  <!-- Pausa -->
+  <section class="screen" id="screen-pause">
+    <div class="dialog">
+      <h2>EN PAUSA</h2>
+      <div class="btn-col">
+        <button class="btn primary" id="btn-resume">CONTINUAR</button>
+        <button class="btn" id="btn-restart">REINICIAR MISION</button>
+        <button class="btn" id="btn-abort">ABANDONAR</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Resultado -->
+  <section class="screen" id="screen-result">
+    <div class="dialog">
+      <h2 id="result-title">MISION COMPLETADA</h2>
+      <div class="grade" id="result-grade">A</div>
+      <p id="result-detail">—</p>
+      <div class="btn-col">
+        <button class="btn primary" id="btn-again">REPETIR</button>
+        <button class="btn" id="btn-next">SIGUIENTE</button>
+        <button class="btn ghost" id="btn-tomenu">MENU</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Camara no disponible -->
+  <section class="screen" id="screen-nocam">
+    <div class="dialog">
+      <h2>SIN CAMARA</h2>
+      <p>No se pudo acceder a la camara. El juego funciona en modo virtual completo (cielo, suelo y entorno generados). Puedes reactivar la camara desde Ajustes.</p>
+      <div class="btn-col">
+        <button class="btn primary" id="btn-nocam-ok">CONTINUAR SIN CAMARA</button>
+        <button class="btn ghost" id="btn-nocam-retry">REINTENTAR</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
