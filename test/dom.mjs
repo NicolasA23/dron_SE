@@ -51,7 +51,8 @@ function makeCanvas() {
 function makeEl(id = '', tag = 'DIV') {
   const el = {
     id, tagName: tag, style: {}, dataset: {}, children: [], childNodes: [],
-    className: '', textContent: '', innerHTML: '', value: '', checked: false,
+    className: '', textContent: '', value: '', checked: false,
+    _html: '',
     width: 0, height: 0, offsetWidth: 0, offsetHeight: 0,
     _classes: new Set(),
     classList: null,
@@ -80,8 +81,8 @@ function makeEl(id = '', tag = 'DIV') {
       if (p) p.removeChild(this);
       this._parent = null;
     },
-    querySelector: (sel) => makeEl('', 'DIV'),
-    querySelectorAll: () => [],
+    querySelector: (sel) => matchAll(el, sel)[0] || null,
+    querySelectorAll: (sel) => matchAll(el, sel),
     addEventListener(t, fn) { (this._listeners[t] = this._listeners[t] || []).push(fn); },
     removeEventListener() {},
     dispatchEvent() { return true; },
@@ -95,6 +96,29 @@ function makeEl(id = '', tag = 'DIV') {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100 }),
     getContext: () => makeCtx2D(),
   };
+  // mantener className y classList sincronizados
+  let _className = '';
+  Object.defineProperty(el, 'className', {
+    get() { return _className; },
+    set(v) {
+      _className = String(v);
+      el._classes = new Set(String(v).split(/\s+/).filter(Boolean));
+    },
+    configurable: true,
+  });
+  Object.defineProperty(el, 'innerHTML', {
+    get() { return el._html; },
+    set(v) {
+      el._html = String(v);
+      // el stub no analiza HTML: solo sabe vaciar el arbol
+      if (String(v).trim() === '') {
+        el.children = []; el.childNodes = [];
+        el.firstChild = null; el.lastChild = null;
+        for (const c of el.children) c._parent = null;
+      }
+    },
+    configurable: true,
+  });
   el.classList = {
     add: (...cs) => cs.forEach((c) => el._classes.add(c)),
     remove: (...cs) => cs.forEach((c) => el._classes.delete(c)),
@@ -102,6 +126,25 @@ function makeEl(id = '', tag = 'DIV') {
     contains: (c) => el._classes.has(c),
   };
   return el;
+}
+
+/** Busqueda muy simple por etiqueta, .clase o #id dentro del subarbol. */
+function matchAll(root, selector) {
+  const out = [];
+  const parts = String(selector).split(',').map((s) => s.trim()).filter(Boolean);
+  const walk = (node) => {
+    for (const c of node.children || []) {
+      if (!c || typeof c !== 'object') continue;
+      for (const sel of parts) {
+        if (sel.startsWith('.')) { if (c._classes?.has(sel.slice(1))) out.push(c); }
+        else if (sel.startsWith('#')) { if (c.id === sel.slice(1)) out.push(c); }
+        else if (c.tagName === sel.toUpperCase()) out.push(c);
+      }
+      walk(c);
+    }
+  };
+  walk(root);
+  return out;
 }
 
 export function installDOM() {

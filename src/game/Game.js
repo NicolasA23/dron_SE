@@ -651,6 +651,12 @@ export class Game {
   /** Piloto automatico de regreso a la base. */
   _autopilot(dt) {
     const d = this.drone;
+    if (d.crashed || d.battery <= 0) { this.autopilot = false; return null; }
+    // si esta en tierra, el piloto automatico despega por su cuenta
+    if (!d.flying && d.landed && d.battery > 25) {
+      d.takeoff();
+      this.hud.toast('Piloto automatico: despegando', 'good');
+    }
     const home = this.world.pads[0].position;
     const dx = home.x - d.position.x, dz = home.z - d.position.z;
     const dist = Math.hypot(dx, dz);

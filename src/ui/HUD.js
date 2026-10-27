@@ -60,8 +60,11 @@ export class HUD {
     for (const o of objectives) {
       const d = document.createElement('div');
       d.className = 'step' + (o.done ? ' done' : o.active ? ' active' : '');
-      d.innerHTML = `<i>${o.done ? '&#10003;' : '&nbsp;'}</i><span></span>`;
-      d.querySelector('span').textContent = o.text;
+      const mark = document.createElement('i');
+      mark.textContent = o.done ? '\u2713' : '';
+      const label = document.createElement('span');
+      label.textContent = o.text;
+      d.append(mark, label);
       wrap.appendChild(d);
     }
   }

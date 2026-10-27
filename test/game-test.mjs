@@ -167,6 +167,46 @@ for (let i = 0; i < 900; i++) { game._last = performance.now() - 16; game._loop(
 check('el piloto automatico regresa a la base', game.drone.position.length() < 6,
   `(dist=${game.drone.position.length().toFixed(2)})`);
 
+/* ---------------- el HUD refleja el estado ---------------- */
+{
+  // estado conocido: dron en tierra
+  game.autopilot = false;
+  game.drone.land();
+  for (let i = 0; i < 240; i++) { game._last = performance.now() - 16; game._loop(performance.now()); }
+  check('el dron esta en tierra', game.drone.landed === true && !game.drone.isAirborne);
+
+  // reproducir la estructura real del boton (el stub no analiza HTML)
+  const btn = document.getElementById('btn-takeoff');
+  btn.innerHTML = '';
+  const ico = document.createElement('i');
+  ico.className = 'ico';
+  ico.textContent = '\u25B2';
+  const lbl = document.createElement('span');
+  lbl.textContent = 'DESPEGAR';
+  btn.append(ico, lbl);
+
+  game._onAction('takeoff');
+  for (let i = 0; i < 60; i++) { game._last = performance.now() - 16; game._loop(performance.now()); }
+  check('el boton pasa a ATERRIZAR', btn.querySelector('span')?.textContent === 'ATERRIZAR',
+    `(${btn.querySelector('span')?.textContent})`);
+  check('el icono del boton cambia', btn.querySelector('.ico')?.textContent === '\u25BC',
+    `(${btn.querySelector('.ico')?.textContent})`);
+
+  const steps = document.getElementById('mission-steps');
+  check('los objetivos se pintan en el HUD', steps.children.length === game._mission.objectives.length,
+    `(${steps.children.length} de ${game._mission.objectives.length})`);
+  check('el texto del objetivo es correcto',
+    steps.children[0]?.querySelector('span')?.textContent === game._mission.objectives[0].text);
+  check('la telemetria se actualiza', document.getElementById('t-alt').textContent.includes('m'),
+    `(${document.getElementById('t-alt').textContent})`);
+  check('el viento se muestra en el HUD', document.getElementById('t-wind').textContent.includes('m/s'));
+
+  game._onAction('takeoff');
+  for (let i = 0; i < 60; i++) { game._last = performance.now() - 16; game._loop(performance.now()); }
+  check('el boton vuelve a DESPEGAR', btn.querySelector('span')?.textContent === 'DESPEGAR');
+}
+
+
 /* ---------------- mision completa ---------------- */
 game.startMission('tutorial');
 const m = game._mission;

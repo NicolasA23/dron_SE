@@ -56,17 +56,20 @@ export class Menu {
     for (const m of MISSIONS) {
       const card = document.createElement('button');
       card.className = 'card';
-      const best = this.h.getBest?.(m.id);
-      card.innerHTML = `<h3></h3><p></p><div class="tags"></div>`;
-      card.querySelector('h3').textContent = `${m.icon}  ${m.name}`;
-      card.querySelector('p').textContent = m.desc;
-      const tags = card.querySelector('.tags');
+      const h3 = document.createElement('h3');
+      h3.textContent = `${m.icon}  ${m.name}`;
+      const p = document.createElement('p');
+      p.textContent = m.desc;
+      const tags = document.createElement('div');
+      tags.className = 'tags';
       for (const t of m.tags) {
         const s = document.createElement('span');
         s.className = 'tag ' + (m.tagClass || '');
         s.textContent = t;
         tags.appendChild(s);
       }
+      card.append(h3, p, tags);
+      const best = this.h.getBest?.(m.id);
       if (best != null) {
         const b = document.createElement('div');
         b.className = 'best';
@@ -84,14 +87,15 @@ export class Menu {
     wrap.innerHTML = '';
     const P = PRESETS[this.settings.get('controlPreset')] || PRESETS.rc2;
     const L = axisLabels(P);
-    const pair = (a) => `${keyName(a[1])} / ${keyName(a[0])}`;
+    // axisLabels devuelve [positivo, negativo]
+    const pair = (a) => `${keyName(a[0])} / ${keyName(a[1])}`;
 
     const blocks = [
       {
         t: 'VUELO \u00b7 ' + P.name,
         items: [
           ['Acelerador (subir / bajar)', pair(L.throttle)],
-          ['Giro (yaw) derecha / izquierda', pair(L.yaw)],
+          ['Giro (derecha / izquierda)', pair(L.yaw)],
           ['Cabeceo (adelante / atras)', pair(L.pitch)],
           ['Alabeo (derecha / izquierda)', pair(L.roll)],
         ],
@@ -104,7 +108,7 @@ export class Menu {
           ['Luces', 'L'],
           ['Cambiar camara', 'C o 1-4'],
           ['Volver a casa', 'H'],
-          ['Giratorio (bajar/subir)', 'G'],
+          ['Giratorio (bajar / subir)', 'G'],
           ['Pausa', 'Esc'],
           ['Reiniciar mision', 'R'],
         ],
@@ -136,18 +140,24 @@ export class Menu {
         ],
       },
     ];
+
     for (const b of blocks) {
       const box = document.createElement('div');
       box.className = 'help-box';
-      box.innerHTML = `<h4>${b.t}</h4><ul></ul>`;
-      const ul = box.querySelector('ul');
+      const h4 = document.createElement('h4');
+      h4.textContent = b.t;
+      box.appendChild(h4);
+      const ul = document.createElement('ul');
       for (const [k, v] of b.items) {
         const li = document.createElement('li');
-        li.innerHTML = `<span></span><kbd></kbd>`;
-        li.querySelector('span').textContent = k;
-        li.querySelector('kbd').textContent = v;
+        const span = document.createElement('span');
+        span.textContent = k;
+        const kbd = document.createElement('kbd');
+        kbd.textContent = v;
+        li.append(span, kbd);
         ul.appendChild(li);
       }
+      box.appendChild(ul);
       wrap.appendChild(box);
     }
   }
@@ -160,9 +170,12 @@ export class Menu {
       const row = document.createElement('div');
       row.className = 'setrow';
       const lab = document.createElement('label');
-      lab.innerHTML = `<span></span><span class="desc"></span>`;
-      lab.querySelector('span').textContent = def.label;
-      lab.querySelector('.desc').textContent = def.desc;
+      const name = document.createElement('span');
+      name.textContent = def.label;
+      const desc = document.createElement('span');
+      desc.className = 'desc';
+      desc.textContent = def.desc;
+      lab.append(name, desc);
 
       let ctrl;
       if (def.type === 'bool') {
@@ -171,31 +184,48 @@ export class Menu {
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = !!this.settings.get(def.key);
-        cb.onchange = () => { this.settings.set(def.key, cb.checked); this.h.onSetting?.(def.key, cb.checked); };
+        cb.onchange = () => {
+          this.settings.set(def.key, cb.checked);
+          this.h.onSetting?.(def.key, cb.checked);
+        };
         const i = document.createElement('i');
         ctrl.append(cb, i);
       } else if (def.type === 'select') {
         ctrl = document.createElement('select');
         for (const [v, t] of def.options) {
           const o = document.createElement('option');
-          o.value = v; o.textContent = t;
+          o.value = v;
+          o.textContent = t;
           if (this.settings.get(def.key) === v) o.selected = true;
           ctrl.appendChild(o);
         }
-        ctrl.onchange = () => { this.settings.set(def.key, ctrl.value); this.h.onSetting?.(def.key, ctrl.value); };
+        ctrl.onchange = () => {
+          this.settings.set(def.key, ctrl.value);
+          this.h.onSetting?.(def.key, ctrl.value);
+        };
       }
       row.append(lab, ctrl);
       wrap.appendChild(row);
     }
-    // boton de reset
+
+    // restablecer
     const row = document.createElement('div');
     row.className = 'setrow';
     const lab = document.createElement('label');
-    lab.innerHTML = '<span>Restablecer ajustes</span><span class="desc">Vuelve a los valores por defecto.</span>';
+    const name = document.createElement('span');
+    name.textContent = 'Restablecer ajustes';
+    const desc = document.createElement('span');
+    desc.className = 'desc';
+    desc.textContent = 'Vuelve a los valores por defecto.';
+    lab.append(name, desc);
     const btn = document.createElement('button');
     btn.className = 'btn ghost';
     btn.textContent = 'RESET';
-    btn.onclick = () => { this.settings.reset(); this.buildSettings(); this.h.onSetting?.('reset', null); };
+    btn.onclick = () => {
+      this.settings.reset();
+      this.buildSettings();
+      this.h.onSetting?.('reset', null);
+    };
     row.append(lab, btn);
     wrap.appendChild(row);
   }
