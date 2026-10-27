@@ -1,0 +1,18 @@
+{
+  "name": "dron-se-mr",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Juego interactivo de realidad mixta (MR) del dron SE: vuela el dron sobre la imagen de tu camara y responde al entorno.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --import ./test/register.mjs test/smoke.mjs && node --import ./test/register.mjs test/game-test.mjs",
+    "test:smoke": "node --import ./test/register.mjs test/smoke.mjs",
+    "test:game": "node --import ./test/register.mjs test/game-test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
